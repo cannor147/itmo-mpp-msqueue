@@ -1,47 +1,73 @@
 package msqueue;
 
+import kotlinx.atomicfu.AtomicRef;
+
 public class MSQueue implements Queue {
-    private Node head;
-    private Node tail;
+    private AtomicRef<Node> head;
+    private AtomicRef<Node> tail;
 
     public MSQueue() {
         Node dummy = new Node(0);
-        this.head = dummy;
-        this.tail = dummy;
+        this.head = new AtomicRef<>(dummy);
+        this.tail = new AtomicRef<>(dummy);
     }
 
     @Override
     public void enqueue(int x) {
         Node newTail = new Node(x);
-        tail.next = newTail;
-        tail = newTail;
+        while (true) {
+            Node currentTail = tail.getValue();
+            if (currentTail.next.compareAndSet(null, newTail)) {
+                tail.compareAndSet(currentTail, newTail);
+                return;
+            } else {
+                tail.compareAndSet(currentTail, currentTail.next.getValue());
+            }
+        }
     }
 
     @Override
     public int dequeue() {
-        Node curHead = head;
-        Node next = head.next;
-        if (curHead == tail)
-            return Integer.MIN_VALUE;
-        head = next;
-        return next.x;
+        while (true) {
+            Node currentHead = head.getValue();
+            Node currentTail = tail.getValue();
+            if (currentTail.next.getValue() != null) {
+                tail.compareAndSet(currentTail, currentTail.next.getValue());
+            }
+
+            if (currentHead.next.getValue() == null) {
+                return Integer.MIN_VALUE;
+            }
+
+            if (head.compareAndSet(currentHead, currentHead.next.getValue())) {
+                return currentHead.next.getValue().x;
+            }
+        }
     }
 
     @Override
     public int peek() {
-        Node curHead = head;
-        Node next = head.next;
-        if (curHead == tail)
+        Node currentHead = head.getValue();
+        Node currentTail = tail.getValue();
+
+        if (currentTail.next.getValue() != null) {
+            tail.compareAndSet(currentTail, currentTail.next.getValue());
+        }
+
+        if (currentHead.next.getValue() == null) {
             return Integer.MIN_VALUE;
-        return next.x;
+        } else {
+            return currentHead.next.getValue().x;
+        }
     }
 
-    private class Node {
-        final int x;
-        Node next;
+    private static class Node {
+        private final int x;
+        private final AtomicRef<Node> next;
 
         Node(int x) {
             this.x = x;
+            this.next = new AtomicRef<>(null);
         }
     }
 }
